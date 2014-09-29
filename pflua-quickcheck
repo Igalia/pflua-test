@@ -104,21 +104,24 @@ local grammar = {
 
 function main(...)
    local args = { ... }
-   local seed
-   if #args >= 1 and args[1]:match("^--seed=") then
-      seed = assert(tonumber(table.remove(args,1):sub(8)))
+   local seed, iterations
+   while #args >= 1 and args[1]:match("^%-%-") do
+      local arg, _, val = table.remove(args, 1):match("^%-%-([^=]*)(=(.*))$")
+      assert(arg)
+      if arg == 'seed' then seed = assert(tonumber(val))
+      elseif arg == 'iterations' then iterations = assert(tonumber(val))
+      else error("Unknown argument: "..arg) end
    end
    if #args < 1 or #args > 3 then
-      print("usage: pflua-quickcheck [--seed=SEED] PATH/TO/CAPTURE.PCAP [FILTER-LIST] [ITERATIONS]")
+      print("usage: pflua-quickcheck [--seed=SEED] [--iterations=ITERATIONS] PATH/TO/CAPTURE.PCAP [FILTER-LIST]")
       os.exit(1)
    end
-   local capture, filter_list, iterations = args[1], args[2], args[3]
+   local capture, filter_list = args[1], args[2]
    local packets = load_packets(capture)
    local filters
    if filter_list then
       filters = load_filters(filter_list)
    end
-   iterations = tonumber(iterations) or 100
    if seed then
       math.randomseed(seed)
    else
@@ -126,6 +129,7 @@ function main(...)
       print("Using time as seed: "..seed)
       math.randomseed(tonumber(seed))
    end
+   if not iterations then iterations = 100 end
 
    for i = 1,iterations do
       local P, len, idx = choose_packet(packets)
@@ -151,7 +155,10 @@ function main(...)
          print(unoptimized_pred)
          print(optimized_pred)
          print(idx)
-         error('failed.')
+         print("Optimized and unoptimized filter return values do not match.")
+         print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
+                             seed, iterations, capture, filter_list))
+         os.exit(1)
       end
    end
    print(iterations.." iterations succeeded.")
