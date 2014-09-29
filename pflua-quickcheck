@@ -125,11 +125,11 @@ function main(...)
    if seed then
       math.randomseed(seed)
    else
-      seed = (gmtime() * 1e6 % 1000000)
+      seed = math.floor(gmtime() * 1e6) % 10^9
       print("Using time as seed: "..seed)
       math.randomseed(tonumber(seed))
    end
-   if not iterations then iterations = 100 end
+   if not iterations then iterations = 1000 end
 
    for i = 1,iterations do
       local P, len, idx = choose_packet(packets)
@@ -144,20 +144,19 @@ function main(...)
       local perturbed = perturb_expr(expanded)
       local optimized = optimize.optimize(expanded)
 
-
-      pp(expanded)
-      pp(perturbed)
-      pp(optimized)
       local unoptimized_pred = codegen.compile(expanded, F)
       local optimized_pred = codegen.compile(optimized, F)
 
       if unoptimized_pred(P, len) ~= optimized_pred(P, len) then
+         pp(expanded)
+         pp(perturbed)
+         pp(optimized)
          print(unoptimized_pred)
          print(optimized_pred)
          print(idx)
          print("Optimized and unoptimized filter return values do not match.")
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                             seed, iterations, capture, filter_list))
+                             seed, i, capture, filter_list))
          os.exit(1)
       end
    end
