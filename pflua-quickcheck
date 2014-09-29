@@ -103,9 +103,16 @@ local grammar = {
 }
 
 function main(...)
-   local capture, filter_list, iterations, seed = ...
-   assert(capture,
-          "usage: pflua-quickcheck PATH/TO/CAPTURE.PCAP [FILTER-LIST] [ITERATIONS [SEED]]")
+   local args = { ... }
+   local seed
+   if #args >= 1 and args[1]:match("^--seed=") then
+      seed = assert(tonumber(table.remove(args,1):sub(8)))
+   end
+   if #args < 1 or #args > 3 then
+      print("usage: pflua-quickcheck [--seed=SEED] PATH/TO/CAPTURE.PCAP [FILTER-LIST] [ITERATIONS]")
+      os.exit(1)
+   end
+   local capture, filter_list, iterations = args[1], args[2], args[3]
    local packets = load_packets(capture)
    local filters
    if filter_list then
@@ -113,7 +120,7 @@ function main(...)
    end
    iterations = tonumber(iterations) or 100
    if seed then
-      math.randomseed(tonumber(seed))
+      math.randomseed(seed)
    else
       seed = (gmtime() * 1e6 % 1000000)
       print("Using time as seed: "..seed)

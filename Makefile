@@ -14,7 +14,7 @@ check_submodules:
 	    echo "Can't find deps/pflua/. You might need to: git submodule update --init --recursive"; exit 1; \
 	fi
 
-foo: check_submodules
+quickcheck: check_submodules
 	./pflua-quickcheck savefiles/wingolog.org.pcap test-filters
 	./pflua-quickcheck savefiles/wingolog.org.pcap
 
