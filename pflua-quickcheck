@@ -11,44 +11,7 @@ local expand = require("pf.expand")
 local optimize = require("pf.optimize")
 local utils = require('pf.utils')
 local codegen = require('pf.codegen')
-local now, pp = utils.now, utils.pp
-
-local function filter_time(pred, ptr, ptr_end, expected)
-   local total_count = 0
-   local match_count = 0
-   local start = now()
-   while ptr < ptr_end do
-      local record = ffi.cast("struct pcap_record *", ptr)
-      local packet = ffi.cast("unsigned char *", record + 1)
-      if pred(packet, record.incl_len) then
-         match_count = match_count + 1
-      end
-      total_count = total_count + 1
-      ptr = packet + record.incl_len
-   end
-   local lapse = now() - start
-   if match_count ~= expected then
-      error("expected "..expected.." matching packets, but got "..match_count)
-   end
-   return total_count / lapse / 1e6
-end
-
-function run_filters(tests, ptr, ptr_end)
-   local results = {}
-   for i, test in ipairs(tests) do
-      results[i] = filter_time(test.pred, ptr, ptr_end, test.count)
-   end
-   return results
-end
-
-function run_tests(tests, capture_start, capture_end, iterations)
-   run_filters(tests, capture_start, capture_end) -- Warmup
-   for i=1,iterations do
-      local scores = run_filters(tests, capture_start, capture_end)
-      print(table.concat(scores, '\t'))
-      io.flush()
-   end
-end
+local gmtime, pp = utils.gmtime, utils.pp
 
 local function load_packets(file)
    local header, ptr, ptr_end = savefile.open_and_mmap(file)
@@ -80,6 +43,65 @@ end
 
 local function perturb_expr(expr) return expr end
 
+local function terminal(expr)
+   local term = {}
+   function term.produce(grammar) return expr end
+   return term
+end
+local function choice(choices)
+   local term = {}
+   function term.produce(grammar) 
+      local which = math.random(#choices)
+      return grammar[choices[which]].produce(grammar)
+   end
+   return term
+end
+local function terminalchoice(terminals)
+   local term = {}
+   function term.produce(grammar)
+      local choices = {}
+      local which = math.random(#terminals)
+      return terminals[which]
+   end
+   return term
+end
+local function range(min, max)
+   local term = {}
+   function term.produce(grammar)
+      return min + math.random(max + 1 - min)
+   end
+   return term
+end
+local function nonterminal(expr)
+   local term = {}
+   function term.produce(grammar)
+      local ret = {}
+      for i = 1,#expr do
+         ret[i] = grammar[expr[i]].produce(grammar)
+      end
+      return ret
+   end
+   return term
+end
+
+local grammar = {
+   True = terminal({ 'true' }),
+   False = terminal({ 'false' }),
+   Fail = terminal({ 'fail' }),
+   ComparisonOp = terminalchoice({ '<', '>' }),
+   BinaryOp = terminalchoice({ '+', '-' }),
+   UnaryOp = terminalchoice({ 'uint32', 'int32', 'ntohs', 'ntohl' }),
+   Number = range(-2^31, 2^32 - 1),
+   Len = terminal('len'),
+   IfOp = terminal('if'),
+   Unary = nonterminal({ "UnaryOp", "Arithmetic" }),
+   Binary = nonterminal({ "BinaryOp", "Arithmetic", "Arithmetic" }),
+   Arithmetic = choice({ "Binary", "Unary", "Number", "Len" }),
+   Comparison = nonterminal({ "ComparisonOp", "Arithmetic", "Arithmetic" }),
+   Conditional = nonterminal({ "IfOp", "LogicalExpr", "LogicalExpr", "LogicalExpr" }),
+   LogicalExpr = choice({ "Conditional", "Comparison", "True", "False", "Fail" })
+}
+
 function main(...)
    local capture, filter_list, iterations, seed = ...
    assert(filter_list,
@@ -90,10 +112,12 @@ function main(...)
    if seed then
       math.randomseed(tonumber(seed))
    else
-      seed = os.time()
-      print("Using os.time() as seed: "..seed)
+      seed = gmtime()
+      print("Using time as seed: "..seed)
       math.randomseed(tonumber(seed))
    end
+   -- pp(grammar.LogicalExpr.produce(grammar))
+
    for i = 1,iterations do
       local P, len, idx = choose_packet(packets)
       local F = choose_filter(filters)
