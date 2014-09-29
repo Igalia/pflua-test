@@ -16,5 +16,6 @@ check_submodules:
 
 foo: check_submodules
 	./pflua-quickcheck savefiles/wingolog.org.pcap test-filters
+	./pflua-quickcheck savefiles/wingolog.org.pcap
 
 .SERIAL: all

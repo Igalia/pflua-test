@@ -104,34 +104,43 @@ local grammar = {
 
 function main(...)
    local capture, filter_list, iterations, seed = ...
-   assert(filter_list,
-          "usage: pflua-quickcheck PATH/TO/CAPTURE.PCAP FILTER-LIST [ITERATIONS [SEED]]")
-   packets = load_packets(capture)
-   filters = load_filters(filter_list)
+   assert(capture,
+          "usage: pflua-quickcheck PATH/TO/CAPTURE.PCAP [FILTER-LIST] [ITERATIONS [SEED]]")
+   local packets = load_packets(capture)
+   local filters
+   if filter_list then
+      filters = load_filters(filter_list)
+   end
    iterations = tonumber(iterations) or 100
    if seed then
       math.randomseed(tonumber(seed))
    else
-      seed = gmtime()
+      seed = (gmtime() * 1e6 % 1000000)
       print("Using time as seed: "..seed)
       math.randomseed(tonumber(seed))
    end
-   -- pp(grammar.LogicalExpr.produce(grammar))
 
    for i = 1,iterations do
       local P, len, idx = choose_packet(packets)
-      local F = choose_filter(filters)
-      local expanded = expand.expand(parse.parse(F), "EN10MB")
+      local F, expanded
+      if filters then
+         F = choose_filter(filters)
+         expanded = expand.expand(parse.parse(F), "EN10MB")
+      else
+         F = "grammar-generated logical expression"
+         expanded = grammar.LogicalExpr.produce(grammar)
+      end
       local perturbed = perturb_expr(expanded)
       local optimized = optimize.optimize(expanded)
 
+
+      pp(expanded)
+      pp(perturbed)
+      pp(optimized)
       local unoptimized_pred = codegen.compile(expanded, F)
       local optimized_pred = codegen.compile(optimized, F)
 
       if unoptimized_pred(P, len) ~= optimized_pred(P, len) then
-         pp(expanded)
-         pp(perturbed)
-         pp(optimized)
          print(unoptimized_pred)
          print(optimized_pred)
          print(idx)
