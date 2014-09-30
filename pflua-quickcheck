@@ -25,82 +25,42 @@ local function load_packets(file)
    return ret
 end
 
+local function choose(choices)
+   local idx = math.random(#choices)
+   return choices[idx], idx
+end
+
 local function load_filters(file)
    local ret = {}
    for line in io.lines(file) do table.insert(ret, line) end
    return ret
 end
 
-local function choose_packet(packets)
-   local idx = math.random(#packets)
-   local ret = packets[idx]
-   return ret.packet, ret.len, idx
-end
-
-local function choose_filter(filters)
-   return filters[math.random(#filters)]
-end
-
 local function perturb_expr(expr) return expr end
 
-local function terminal(expr)
-   local term = {}
-   function term.produce(grammar) return expr end
-   return term
-end
-local function choice(choices)
-   local term = {}
-   function term.produce(grammar) 
-      local which = math.random(#choices)
-      return grammar[choices[which]].produce(grammar)
-   end
-   return term
-end
-local function terminalchoice(terminals)
-   local term = {}
-   function term.produce(grammar)
-      local choices = {}
-      local which = math.random(#terminals)
-      return terminals[which]
-   end
-   return term
-end
-local function range(min, max)
-   local term = {}
-   function term.produce(grammar)
-      return min + math.random(max + 1 - min)
-   end
-   return term
-end
-local function nonterminal(expr)
-   local term = {}
-   function term.produce(grammar)
-      local ret = {}
-      for i = 1,#expr do
-         ret[i] = grammar[expr[i]].produce(grammar)
-      end
-      return ret
-   end
-   return term
-end
+local True, False, Fail, ComparisonOp, BinaryOp, UnaryOp, Number, Len
+local Unary, Binary, Arithmetic, Comparison, Conditional, Logical
 
-local grammar = {
-   True = terminal({ 'true' }),
-   False = terminal({ 'false' }),
-   Fail = terminal({ 'fail' }),
-   ComparisonOp = terminalchoice({ '<', '>' }),
-   BinaryOp = terminalchoice({ '+', '-' }),
-   UnaryOp = terminalchoice({ 'uint32', 'int32', 'ntohs', 'ntohl' }),
-   Number = range(-2^31, 2^32 - 1),
-   Len = terminal('len'),
-   IfOp = terminal('if'),
-   Unary = nonterminal({ "UnaryOp", "Arithmetic" }),
-   Binary = nonterminal({ "BinaryOp", "Arithmetic", "Arithmetic" }),
-   Arithmetic = choice({ "Binary", "Unary", "Number", "Len" }),
-   Comparison = nonterminal({ "ComparisonOp", "Arithmetic", "Arithmetic" }),
-   Conditional = nonterminal({ "IfOp", "LogicalExpr", "LogicalExpr", "LogicalExpr" }),
-   LogicalExpr = choice({ "Conditional", "Comparison", "True", "False", "Fail" })
-}
+function True() return { 'true' } end
+function False() return { 'false' } end
+function Fail() return { 'fail' } end
+function ComparisonOp() return choose({ '<', '>' }) end
+function BinaryOp() return choose({ '+', '-' }) end
+function UnaryOp() return choose({ 'uint32', 'int32', 'ntohs', 'ntohl' }) end
+function Number(min, max)
+   min = min or -2^31
+   max = max or 2^32 - 1
+   return min + math.random(0, max - min)
+end
+function Len() return 'len' end
+function Unary() return { UnaryOp(), Arithmetic() } end
+function Binary() return { BinaryOp(), Arithmetic(), Arithmetic() } end
+function Arithmetic() return choose({ Unary, Binary, Number, Len })() end
+function Comparison() return { ComparisonOp(), Arithmetic(), Arithmetic() } end
+function Conditional() return { 'if', Logical(), Logical(), Logical() } end
+function Logical()
+   return choose({ Conditional, Comparison, True, False, Fail })()
+end
 
 function main(...)
    local args = { ... }
@@ -132,14 +92,15 @@ function main(...)
    if not iterations then iterations = 1000 end
 
    for i = 1,iterations do
-      local P, len, idx = choose_packet(packets)
+      local packet, packet_idx = choose(packets)
+      local P, len = packet.packet, packet.len
       local F, expanded
       if filters then
-         F = choose_filter(filters)
+         F = choose(filters)
          expanded = expand.expand(parse.parse(F), "EN10MB")
       else
-         F = "grammar-generated logical expression"
-         expanded = grammar.LogicalExpr.produce(grammar)
+         F = "generated expression"
+         expanded = Logical()
       end
       local perturbed = perturb_expr(expanded)
       local optimized = optimize.optimize(expanded)
@@ -153,7 +114,7 @@ function main(...)
          pp(optimized)
          print(unoptimized_pred)
          print(optimized_pred)
-         print(idx)
+         print(packet_idx)
          print("Optimized and unoptimized filter return values do not match.")
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
                              seed, i, capture, filter_list))
