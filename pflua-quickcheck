@@ -53,7 +53,7 @@ function Unary(db) return { UnaryOp(), Arithmetic(db) } end
 function Binary(db) return { BinaryOp(), Arithmetic(db), Arithmetic(db) } end
 function PacketAccess(db)
    local pkt_access_size = choose({1, 2, 4})
-   local position = Arithmetic(db)
+   local position = {'uint32', Arithmetic(db) }
    table.insert(db, {'>=', 'len', {'+', position, pkt_access_size}})
    return { '[]', position, pkt_access_size }
 end
