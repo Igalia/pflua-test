@@ -134,7 +134,7 @@ function main(...)
          print(packet_idx)
          print("Optimized and unoptimized filter return values do not match.")
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                             seed, i, capture, filter_list))
+                             seed, i + 1, capture, filter_list))
          os.exit(1)
       end
    end
