@@ -47,16 +47,25 @@ function Fail() return { 'fail' } end
 function ComparisonOp() return choose({ '<', '>' }) end
 function BinaryOp() return choose({ '+', '-' }) end
 function UnaryOp() return choose({ 'uint32', 'int32', 'ntohs', 'ntohl' }) end
-function Number(min, max)
-   min = min or -2^31
-   max = max or 2^32 - 1
-   return min + math.random(0, max - min)
-end
+function Number() return math.random(-2^31, 2^32 - 1) end
 function Len() return 'len' end
-function Unary() return { UnaryOp(), Arithmetic() } end
-function Binary() return { BinaryOp(), Arithmetic(), Arithmetic() } end
-function Arithmetic() return choose({ Unary, Binary, Number, Len })() end
-function Comparison() return { ComparisonOp(), Arithmetic(), Arithmetic() } end
+function Unary(db) return { UnaryOp(), Arithmetic(db) } end
+function Binary(db) return { BinaryOp(), Arithmetic(db), Arithmetic(db) } end
+function PacketAccess(db)
+   local pkt_access_size = choose({1, 2, 4})
+   local position = Arithmetic(db)
+   table.insert(db, {'>=', 'len', {'+', position, pkt_access_size}})
+   return { '[]', position, pkt_access_size }
+end
+function Arithmetic(db) return choose({ Unary, Binary, Number, Len, PacketAccess })(db) end
+function Comparison()
+   local assertions = {}
+   local expr = { ComparisonOp(), Arithmetic(assertions), Arithmetic(assertions) }
+   while #assertions > 0 do
+      expr = { 'if', table.remove(assertions), expr, { 'fail' } }
+   end
+   return expr
+end
 function Conditional() return { 'if', Logical(), Logical(), Logical() } end
 function Logical()
    return choose({ Conditional, Comparison, True, False, Fail })()
