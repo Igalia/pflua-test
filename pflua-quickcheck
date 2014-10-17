@@ -120,7 +120,16 @@ function main(...)
          expanded = Logical()
       end
       local perturbed = perturb_expr(expanded)
-      local optimized = optimize.optimize(expanded)
+      local opt_status, optimized =
+         xpcall(function () return optimize.optimize(expanded) end,
+                debug.traceback)
+      if not opt_status then
+         print(string.format("Found an optimizer bug on run %s", i))
+         print(optimized) -- This is an error code and traceback in this case
+         print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
+                             seed, i + 1, capture, filter_list))
+         os.exit(1)
+      end
 
       local unoptimized_pred = codegen.compile(expanded, F)
       local optimized_pred = codegen.compile(optimized, F)
