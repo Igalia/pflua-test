@@ -135,8 +135,11 @@ function main(...)
       local optimized_pred = codegen.compile(optimized, F)
 
       if unoptimized_pred(P, len) ~= optimized_pred(P, len) then
+         print("--- Expanded:")
          pp(expanded)
+         print("--- Perturbed:")
          pp(perturbed)
+         print("--- Optimized:")
          pp(optimized)
          print(unoptimized_pred)
          print(optimized_pred)
