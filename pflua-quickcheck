@@ -124,7 +124,8 @@ function main(...)
          xpcall(function () return optimize.optimize(expanded) end,
                 debug.traceback)
       if not opt_status then
-         print(string.format("Found an optimizer bug on run %s", i))
+         print(string.format("Found an optimizer bug on run %s, with code:", i))
+         pp(expanded)
          print(optimized) -- This is an error code and traceback in this case
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
                              seed, i + 1, capture, filter_list))
