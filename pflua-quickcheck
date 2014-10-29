@@ -79,9 +79,17 @@ function Logical()
    return choose({ Conditional, Comparison, True, False, Fail })()
 end
 
+function print_repo_versions()
+   print(string.format("pflua-quickcheck revision: %s",
+                       io.popen("git rev-parse HEAD"):read("*all")))
+   print(string.format("pflua revision: %s",
+                       io.popen("cd deps/pflua && git rev-parse HEAD"):read("*all")))
+end
+
 function main(...)
    local args = { ... }
    local seed, iterations
+
    while #args >= 1 and args[1]:match("^%-%-") do
       local arg, _, val = table.remove(args, 1):match("^%-%-([^=]*)(=(.*))$")
       assert(arg)
@@ -127,6 +135,7 @@ function main(...)
          print(string.format("Found an optimizer bug on run %s, with code:", i))
          pp(expanded)
          print(optimized) -- This is an error code and traceback in this case
+         print_repo_versions()
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
                              seed, i + 1, capture, filter_list or ""))
          os.exit(1)
@@ -145,6 +154,7 @@ function main(...)
          print(unoptimized_pred)
          print(optimized_pred)
          print(packet_idx)
+         print_repo_versions()
          print("Optimized and unoptimized filter return values do not match.")
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
                              seed, i + 1, capture, filter_list or ""))
