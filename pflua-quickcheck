@@ -128,7 +128,7 @@ function main(...)
          pp(expanded)
          print(optimized) -- This is an error code and traceback in this case
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                             seed, i + 1, capture, filter_list))
+                             seed, i + 1, capture, filter_list or ""))
          os.exit(1)
       end
 
@@ -147,7 +147,7 @@ function main(...)
          print(packet_idx)
          print("Optimized and unoptimized filter return values do not match.")
          print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                             seed, i + 1, capture, filter_list))
+                             seed, i + 1, capture, filter_list or ""))
          os.exit(1)
       end
    end
