@@ -36,8 +36,6 @@ local function load_filters(file)
    return ret
 end
 
-local function perturb_expr(expr) return expr end
-
 local True, False, Fail, ComparisonOp, BinaryOp, UnaryOp, Number, Len
 local Unary, Binary, Arithmetic, Comparison, Conditional, Logical
 
@@ -119,7 +117,6 @@ function main(...)
          F = "generated expression"
          expanded = Logical()
       end
-      local perturbed = perturb_expr(expanded)
       local opt_status, optimized =
          xpcall(function () return optimize.optimize(expanded) end,
                 debug.traceback)
@@ -138,8 +135,6 @@ function main(...)
       if unoptimized_pred(P, len) ~= optimized_pred(P, len) then
          print("--- Expanded:")
          pp(expanded)
-         print("--- Perturbed:")
-         pp(perturbed)
          print("--- Optimized:")
          pp(optimized)
          print(unoptimized_pred)
