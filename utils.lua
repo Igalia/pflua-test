@@ -4,6 +4,6 @@ module(..., package.seeall)
 
 function choose(choices)
    local idx = math.random(#choices)
-   return choices[idx], idx
+   return choices[idx]
 end
 

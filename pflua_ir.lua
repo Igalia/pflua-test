@@ -37,7 +37,7 @@ end
 function Arithmetic(db)
    -- Only return the chosen value, not the index too
    -- (expr) is standard Lua; it returns only the first value of a multi-value expr
-   return (utils.choose({ Unary, Binary, Number, Len, PacketAccess })(db))
+   return utils.choose({ Unary, Binary, Number, Len, PacketAccess })(db)
 end
 function Comparison()
    local assertions = {}
