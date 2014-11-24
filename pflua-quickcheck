@@ -2,81 +2,13 @@
 -- -*- lua -*-
 package.path = package.path .. ";deps/pflua/src/?.lua"
 
-local ffi = require("ffi")
-local pf = require("pf")
-local savefile = require("pf.savefile")
-local libpcap = require("pf.libpcap")
-local parse = require("pf.parse")
-local expand = require("pf.expand")
-local optimize = require("pf.optimize")
-local utils = require('pf.utils')
-local codegen = require('pf.codegen')
-local gmtime, pp = utils.gmtime, utils.pp
+local pfutils = require('pf.utils')
+local gmtime, pp = pfutils.gmtime, pfutils.pp
+local utils = require("utils")
 
-local function load_packets(file)
-   local header, ptr, ptr_end = savefile.open_and_mmap(file)
-   local ret = {}
-   while ptr < ptr_end do
-      local record = ffi.cast("struct pcap_record *", ptr)
-      local packet = ffi.cast("unsigned char *", record + 1)
-      table.insert(ret, { packet=packet, len=record.incl_len })
-      ptr = packet + record.incl_len
-   end
-   return ret
-end
-
-local function choose(choices)
-   local idx = math.random(#choices)
-   return choices[idx], idx
-end
-
-local function load_filters(file)
-   local ret = {}
-   for line in io.lines(file) do table.insert(ret, line) end
-   return ret
-end
-
-local function perturb_expr(expr) return expr end
-
-local True, False, Fail, ComparisonOp, BinaryOp, UnaryOp, Number, Len
-local Unary, Binary, Arithmetic, Comparison, Conditional, Logical
-
-function True() return { 'true' } end
-function False() return { 'false' } end
-function Fail() return { 'fail' } end
-function ComparisonOp() return choose({ '<', '>' }) end
-function BinaryOp() return choose({ '+', '-', '/' }) end
-function UnaryOp() return choose({ 'uint32', 'int32', 'ntohs', 'ntohl' }) end
-function Number()
-   if math.random() < 0.2 then return math.random(-2^31, 2^32 - 1)
-   else return choose({ 0, 1, -2^31, 2^32-1, 2^31-1 })
-   end
-end
-function Len() return 'len' end
-function Unary(db) return { UnaryOp(), Arithmetic(db) } end
-function Binary(db)
-   local op, lhs, rhs = BinaryOp(), Arithmetic(db), Arithmetic(db)
-   if op == '/' then table.insert(db, { '!=', rhs, 0 }) end
-   return { op, lhs, rhs }
-end
-function PacketAccess(db)
-   local pkt_access_size = choose({1, 2, 4})
-   local position = {'uint32', Arithmetic(db) }
-   table.insert(db, {'>=', 'len', {'+', position, pkt_access_size}})
-   return { '[]', position, pkt_access_size }
-end
-function Arithmetic(db) return choose({ Unary, Binary, Number, Len, PacketAccess })(db) end
-function Comparison()
-   local assertions = {}
-   local expr = { ComparisonOp(), Arithmetic(assertions), Arithmetic(assertions) }
-   while #assertions > 0 do
-      expr = { 'if', table.remove(assertions), expr, { 'fail' } }
-   end
-   return expr
-end
-function Conditional() return { 'if', Logical(), Logical(), Logical() } end
-function Logical()
-   return choose({ Conditional, Comparison, True, False, Fail })()
+local function rerun_usage(seed, i, prop, prop_args)
+   print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
+                       seed, i + 1, prop, table.concat(prop_args, " ")))
 end
 
 function main(...)
@@ -87,17 +19,11 @@ function main(...)
       assert(arg)
       if arg == 'seed' then seed = assert(tonumber(val))
       elseif arg == 'iterations' then iterations = assert(tonumber(val))
-      else error("Unknown argument: "..arg) end
+      else error("Unknown argument: " .. arg) end
    end
-   if #args < 1 or #args > 3 then
-      print("usage: pflua-quickcheck [--seed=SEED] [--iterations=ITERATIONS] PATH/TO/CAPTURE.PCAP [FILTER-LIST]")
+   if #args < 1 then
+      print("Usage: pflua-quickcheck [--seed=SEED] [--iterations=ITERATIONS] property_file [property_specific_args]")
       os.exit(1)
-   end
-   local capture, filter_list = args[1], args[2]
-   local packets = load_packets(capture)
-   local filters
-   if filter_list then
-      filters = load_filters(filter_list)
    end
    if seed then
       math.randomseed(seed)
@@ -108,47 +34,40 @@ function main(...)
    end
    if not iterations then iterations = 1000 end
 
+   local prop = require(args[1]) -- The property file
+   local prop_name = table.remove(args, 1)
+   -- If the property can take extra arguments, handle them
+   local extra_property_info = {}
+   if prop.handle_prop_args then
+      extra_property_info = prop.handle_prop_args(args)
+   end
+
    for i = 1,iterations do
-      local packet, packet_idx = choose(packets)
-      local P, len = packet.packet, packet.len
-      local F, expanded
-      if filters then
-         F = choose(filters)
-         expanded = expand.expand(parse.parse(F), "EN10MB")
-      else
-         F = "generated expression"
-         expanded = Logical()
+      -- todo: wrap this in xpcall
+      propgen_ok, expected, got = xpcall(function () prop.property(extra_property_info) end,
+                                         debug.traceback)
+      if not propgen_ok then
+          print(string.format("Crashed generating properties on run %s.", i))
+          print(expected) -- This is an error code and traceback in this case
+          rerun_usage(seed, i, prop_name, args)
+          os.exit(1)
       end
-      local perturbed = perturb_expr(expanded)
-      local opt_status, optimized =
-         xpcall(function () return optimize.optimize(expanded) end,
-                debug.traceback)
-      if not opt_status then
-         print(string.format("Found an optimizer bug on run %s, with code:", i))
-         pp(expanded)
-         print(optimized) -- This is an error code and traceback in this case
-         print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                             seed, i + 1, capture, filter_list or ""))
-         os.exit(1)
-      end
-
-      local unoptimized_pred = codegen.compile(expanded, F)
-      local optimized_pred = codegen.compile(optimized, F)
-
-      if unoptimized_pred(P, len) ~= optimized_pred(P, len) then
-         print("--- Expanded:")
-         pp(expanded)
-         print("--- Perturbed:")
-         pp(perturbed)
-         print("--- Optimized:")
-         pp(optimized)
-         print(unoptimized_pred)
-         print(optimized_pred)
-         print(packet_idx)
-         print("Optimized and unoptimized filter return values do not match.")
-         print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                             seed, i + 1, capture, filter_list or ""))
-         os.exit(1)
+      if expected ~= got then
+          print("The property was falsified.")
+          -- If the property file has extra info available, show it
+          if prop.print_extra_information then
+             prop.print_extra_information()
+          end
+          print("--- Expected:")
+          pp(expected)
+          print("--- Got:")
+          pp(got)
+          --print(unoptimized_pred)
+          --print(optimized_pred)
+          --print(packet_idx)
+          print("Property failed; expected and received return values do not match.")
+          rerun_usage(seed, i, prop_name, args)
+          os.exit(1)
       end
    end
    print(iterations.." iterations succeeded.")

@@ -15,7 +15,7 @@ check_submodules:
 	fi
 
 quickcheck: check_submodules
-	./pflua-quickcheck savefiles/wingolog.org.pcap test-filters
-	./pflua-quickcheck savefiles/wingolog.org.pcap
+	./pflua-quickcheck prop_opt_eq_unopt savefiles/wingolog.org.pcap test-filters
+	./pflua-quickcheck prop_opt_eq_unopt savefiles/wingolog.org.pcap
 
 .SERIAL: all
