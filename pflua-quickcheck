@@ -3,12 +3,12 @@
 package.path = package.path .. ";deps/pflua/src/?.lua"
 
 local pfutils = require('pf.utils')
-local gmtime, pp = pfutils.gmtime, pfutils.pp
+local gmtime = pfutils.gmtime
 local utils = require("utils")
 
 local function rerun_usage(seed, i, prop, prop_args)
-   print(string.format("Run again as: pflua-quickcheck --seed=%s --iterations=%s %s %s",
-                       seed, i + 1, prop, table.concat(prop_args, " ")))
+   print(("Rerun as: pflua-quickcheck --seed=%s --iterations=%s %s %s"):
+         format(seed, i + 1, prop, table.concat(prop_args, " ")))
 end
 
 function main(...)
@@ -22,7 +22,8 @@ function main(...)
       else error("Unknown argument: " .. arg) end
    end
    if #args < 1 then
-      print("Usage: pflua-quickcheck [--seed=SEED] [--iterations=ITERATIONS] property_file [property_specific_args]")
+      print("Usage: pflua-quickcheck [--seed=SEED] [--iterations=ITERATIONS]" ..
+            " property_file [property_specific_args]")
       os.exit(1)
    end
    if seed then
@@ -43,11 +44,18 @@ function main(...)
    end
 
    for i = 1,iterations do
-      -- todo: wrap this in xpcall
-      propgen_ok, expected, got = xpcall(function () prop.property(extra_property_info) end,
-                                         debug.traceback)
+      -- Wrap property and its arguments in a 0-arity function for xpcall
+      wrap_prop = function() return prop.property(extra_property_info) end
+      propgen_ok, expected, got = xpcall(wrap_prop, debug.traceback)
       if not propgen_ok then
-          print(string.format("Crashed generating properties on run %s.", i))
+          print(("Crashed generating properties on run %s."):format(i))
+          if prop.print_extra_information then
+             print("Attempting to print extra information; it may be wrong.")
+             if not pcall(prop.print_extra_information)
+                then print("Something went wrong printing extra info.")
+             end
+          end
+          print("Traceback (this is reliable):")
           print(expected) -- This is an error code and traceback in this case
           rerun_usage(seed, i, prop_name, args)
           os.exit(1)
@@ -57,15 +65,9 @@ function main(...)
           -- If the property file has extra info available, show it
           if prop.print_extra_information then
              prop.print_extra_information()
+          else
+             print(("Expected: %s\nGot:      %s"):format(expected, got))
           end
-          print("--- Expected:")
-          pp(expected)
-          print("--- Got:")
-          pp(got)
-          --print(unoptimized_pred)
-          --print(optimized_pred)
-          --print(packet_idx)
-          print("Property failed; expected and received return values do not match.")
           rerun_usage(seed, i, prop_name, args)
           os.exit(1)
       end

@@ -7,3 +7,7 @@ function choose(choices)
    return choices[idx]
 end
 
+function choose_with_index(choices)
+   local idx = math.random(#choices)
+   return choices[idx], idx
+end

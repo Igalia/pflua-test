@@ -9,6 +9,8 @@ local savefile = require("pf.savefile")
 local expand = require("pf.expand")
 local optimize = require("pf.optimize")
 local codegen = require('pf.codegen')
+local pfutils = require('pf.utils')
+local pp = pfutils.pp
 
 local pflua_ir = require('pflua_ir')
 local utils = require('utils')
@@ -31,12 +33,14 @@ local function load_filters(file)
    return ret
 end
 
-
+-- Several variables are non-local for print_extra_information()
 function property(packets, filter_list)
    local packet
-   packet, packet_idx = utils.choose(packets)
-   local P, len = packet.packet, packet.len
-   local F, expanded
+   -- Reset these every run, to minimize confusing output on crashes
+   optimized_pred, unoptimized_pred, expanded, optimized = nil, nil, nil, nil
+   packet, packet_idx = utils.choose_with_index(packets)
+   P, packet_len = packet.packet, packet.len
+   local F
    if filters then
       F = utils.choose(filters)
       expanded = expand.expand(parse.parse(F), "EN10MB")
@@ -44,26 +48,36 @@ function property(packets, filter_list)
       F = "generated expression"
       expanded = pflua_ir.Logical()
    end
-   local optimized = optimize.optimize(expanded)
+   optimized = optimize.optimize(expanded)
 
    unoptimized_pred = codegen.compile(expanded, F)
    optimized_pred = codegen.compile(optimized, F)
-
-   return unoptimized_pred(P, len), optimized_pred(P, len)
+   return unoptimized_pred(P, packet_len), optimized_pred(P, packet_len)
 end
 
 -- The test harness calls this on property failure.
 function print_extra_information()
-   print("--- Expanded:")
-   pp(expanded)
-   print("--- Optimized:")
-   pp(optimized)
-   print(string.format("Packet idx: %s", packet_idx))
+   if expanded then
+      print("--- Expanded:")
+      pp(expanded)
+   else return -- Nothing else useful available to print
+   end
+   if optimized then
+      print("--- Optimized:")
+      pp(optimized)
+   else return -- Nothing else useful available to print
+   end
+
+   print(("On packet %s: unoptimized was %s, optimized was %s"):
+         format(packet_idx,
+                unoptimized_pred(P, packet_len),
+                optimized_pred(P, packet_len)))
 end
 
 function handle_prop_args(prop_args)
    if #prop_args < 1 or #prop_args > 2 then
-      print("Usage: (pflua-quickcheck [args] prop_opt_eq_unopt) PATH/TO/CAPTURE.PCAP [FILTER-LIST]")
+      print("Usage: (pflua-quickcheck [args] prop_opt_eq_unopt) " ..
+            "PATH/TO/CAPTURE.PCAP [FILTER-LIST]")
       os.exit(1)
    end
 

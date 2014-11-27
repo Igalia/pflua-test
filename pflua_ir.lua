@@ -4,21 +4,26 @@
 -- for property-based tests of pflua internals.
 
 module(..., package.seeall)
-utils = require("utils")
+local utils = require("utils")
 
 local True, False, Fail, ComparisonOp, BinaryOp, UnaryOp, Number, Len
-local Unary, Binary, Arithmetic, Comparison, Conditional --, Logical
+local Unary, Binary, Arithmetic, Comparison, Conditional
+-- Logical intentionally is not local; it is used elsewhere
 
 function True() return { 'true' } end
 function False() return { 'false' } end
 function Fail() return { 'fail' } end
 function ComparisonOp() return utils.choose({ '<', '>' }) end
 function BinaryOp() return utils.choose({ '+', '-', '/' }) end
-function UnaryOp() return utils.choose({ 'uint32', 'int32', 'ntohs', 'ntohl' }) end
+function UnaryOp()
+   return utils.choose({ 'uint32', 'int32', 'ntohs', 'ntohl' })
+end
 -- Boundary numbers are often particularly interesting; test them often
 function Number()
-   if math.random() < 0.2 then return math.random(-2^31, 2^32 - 1)
-   else return utils.choose({ 0, 1, -2^31, 2^32-1, 2^31-1 })
+   if math.random() < 0.2
+      then return math.random(-2^31, 2^32 - 1)
+   else
+      return utils.choose({ 0, 1, -2^31, 2^32-1, 2^31-1 })
    end
 end
 function Len() return 'len' end
@@ -36,14 +41,14 @@ function PacketAccess(db)
 end
 function Arithmetic(db)
    -- Only return the chosen value, not the index too
-   -- (expr) is standard Lua; it returns only the first value of a multi-value expr
+   -- (expr) is standard Lua; use only the first value of a multi-value expr
    return utils.choose({ Unary, Binary, Number, Len, PacketAccess })(db)
 end
 function Comparison()
-   local assertions = {}
-   local expr = { ComparisonOp(), Arithmetic(assertions), Arithmetic(assertions) }
-   while #assertions > 0 do
-      expr = { 'if', table.remove(assertions), expr, { 'fail' } }
+   local asserts = {}
+   local expr = { ComparisonOp(), Arithmetic(asserts), Arithmetic(asserts) }
+   while #asserts > 0 do
+      expr = { 'if', table.remove(asserts), expr, { 'fail' } }
    end
    return expr
 end
