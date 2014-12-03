@@ -45,8 +45,8 @@ function main(...)
 
    for i = 1,iterations do
       -- Wrap property and its arguments in a 0-arity function for xpcall
-      wrap_prop = function() return prop.property(extra_property_info) end
-      propgen_ok, expected, got = xpcall(wrap_prop, debug.traceback)
+      local wrap_prop = function() return prop.property(extra_property_info) end
+      local propgen_ok, expected, got = xpcall(wrap_prop, debug.traceback)
       if not propgen_ok then
           print(("Crashed generating properties on run %s."):format(i))
           if prop.print_extra_information then
