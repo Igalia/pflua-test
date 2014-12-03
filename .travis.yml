@@ -7,6 +7,7 @@ before_install: git submodule update --init --recursive
 # libcap2-bin contains setcap
 install: sudo apt-get install libpcap-dev tcpdump libcap2-bin
 
-before_script: sudo setcap cap_net_raw=ep /usr/sbin/tcpdump
+# Some travis-ci build machines allow the setcap, some do not.
+before_script: sudo setcap cap_net_raw=ep /usr/sbin/tcpdump || echo "Setcap failed"
 
 script: make && make check && make quickcheck
