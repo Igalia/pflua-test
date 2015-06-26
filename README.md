@@ -1,4 +1,7 @@
 # pflua-test
+
+WARNING: this repository is out of date. pflua-quickcheck has been merged into pflua.
+
 pflua-quickcheck [--seed=N] [--iterations=N] lua_property_file
 [property-specific-args]
 
